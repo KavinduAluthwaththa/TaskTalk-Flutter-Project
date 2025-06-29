@@ -232,7 +232,9 @@ class TaskCard extends StatelessWidget {
 
   void _toggleCompletion(BuildContext context, TaskProvider taskProvider) {
     HapticFeedback.lightImpact();
-    taskProvider.toggleTaskCompletion(task.id!);
+    if (task.id != null) {
+      taskProvider.toggleTaskCompletion(task.id!);
+    }
   }
 
   void _deleteTask(BuildContext context, TaskProvider taskProvider) {
@@ -253,7 +255,9 @@ class TaskCard extends StatelessWidget {
             ElevatedButton(
               onPressed: () {
                 Navigator.of(context).pop();
-                taskProvider.deleteTask(task.id!);
+                if (task.id != null) {
+                  taskProvider.deleteTask(task.id!);
+                }
               },
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.red,

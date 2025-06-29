@@ -482,7 +482,9 @@ class TaskDetailsBottomSheet extends StatelessWidget {
                             child: ElevatedButton.icon(
                               onPressed: () {
                                 Navigator.of(context).pop();
-                                taskProvider.toggleTaskCompletion(task.id!);
+                                if (task.id != null) {
+                                  taskProvider.toggleTaskCompletion(task.id!);
+                                }
                               },
                               icon: Icon(task.isCompleted ? Icons.refresh : Icons.check),
                               label: Text(task.isCompleted ? 'Mark Pending' : 'Mark Done'),
