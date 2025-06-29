@@ -36,12 +36,8 @@ dependencies:
   cupertino_icons: ^1.0.8
   
   # Voice and Speech
-  speech_to_text: ^7.0.0
+  speech_to_text: 6.6.2
   flutter_tts: ^4.0.2
-  
-  # Local Storage and Database
-  sqflite: ^2.3.3
-  path: ^1.9.0
   
   # Notifications
   flutter_local_notifications: ^17.2.2
@@ -62,10 +58,10 @@ dependencies:
   # Shared Preferences for Settings
   shared_preferences: ^2.2.3
   
-  # Optional: Firebase for cloud sync
-  # firebase_core: ^2.32.0
-  # cloud_firestore: ^4.17.5
-  # firebase_auth: ^4.20.0
+  # Firebase for cloud sync
+  firebase_core: ^2.32.0
+  cloud_firestore: ^4.17.5
+  firebase_auth: 4.16.0
 
 dev_dependencies:
   flutter_test:

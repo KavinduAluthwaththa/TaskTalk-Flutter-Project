@@ -1,112 +1,165 @@
-import 'package:sqflite/sqflite.dart';
-import 'package:path/path.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import '../models/task.dart';
 
 class DatabaseService {
   static final DatabaseService _instance = DatabaseService._internal();
-  static Database? _database;
+  late FirebaseFirestore _firestore;
+  late FirebaseAuth _auth;
+  String? _userId;
 
   DatabaseService._internal();
 
   factory DatabaseService() => _instance;
 
-  Future<Database> get database async {
-    if (_database != null) return _database!;
-    _database = await _initDatabase();
-    return _database!;
+  Future<void> initialize() async {
+    _firestore = FirebaseFirestore.instance;
+    _auth = FirebaseAuth.instance;
+    
+    // Sign in anonymously for simplicity
+    if (_auth.currentUser == null) {
+      await _auth.signInAnonymously();
+    }
+    _userId = _auth.currentUser?.uid;
   }
 
-  Future<Database> _initDatabase() async {
-    String path = join(await getDatabasesPath(), 'tasks_database.db');
-    return await openDatabase(
-      path,
-      version: 1,
-      onCreate: _createDatabase,
-    );
-  }
-
-  Future<void> _createDatabase(Database db, int version) async {
-    await db.execute('''
-      CREATE TABLE tasks(
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        title TEXT NOT NULL,
-        description TEXT,
-        dueTime INTEGER,
-        isCompleted INTEGER NOT NULL DEFAULT 0,
-        createdAt INTEGER NOT NULL,
-        hasReminder INTEGER NOT NULL DEFAULT 0
-      )
-    ''');
+  CollectionReference get _tasksCollection {
+    if (_userId == null) {
+      throw Exception('User not authenticated');
+    }
+    return _firestore.collection('users').doc(_userId).collection('tasks');
   }
 
   // Insert a new task
-  Future<int> insertTask(Task task) async {
-    final db = await database;
-    return await db.insert('tasks', task.toMap());
+  Future<String> insertTask(Task task) async {
+    try {
+      final docRef = await _tasksCollection.add(task.toMap());
+      return docRef.id;
+    } catch (e) {
+      print('Error inserting task: $e');
+      rethrow;
+    }
   }
 
   // Get all tasks
   Future<List<Task>> getAllTasks() async {
-    final db = await database;
-    final List<Map<String, dynamic>> maps = await db.query(
-      'tasks',
-      orderBy: 'createdAt DESC',
-    );
-    return List.generate(maps.length, (i) => Task.fromMap(maps[i]));
+    try {
+      final querySnapshot = await _tasksCollection
+          .orderBy('createdAt', descending: true)
+          .get();
+      
+      return querySnapshot.docs
+          .map((doc) => Task.fromFirestore(doc))
+          .toList();
+    } catch (e) {
+      print('Error getting all tasks: $e');
+      return [];
+    }
   }
 
   // Get incomplete tasks
   Future<List<Task>> getIncompleteTasks() async {
-    final db = await database;
-    final List<Map<String, dynamic>> maps = await db.query(
-      'tasks',
-      where: 'isCompleted = ?',
-      whereArgs: [0],
-      orderBy: 'createdAt DESC',
-    );
-    return List.generate(maps.length, (i) => Task.fromMap(maps[i]));
+    try {
+      final querySnapshot = await _tasksCollection
+          .where('isCompleted', isEqualTo: false)
+          .orderBy('createdAt', descending: true)
+          .get();
+      
+      return querySnapshot.docs
+          .map((doc) => Task.fromFirestore(doc))
+          .toList();
+    } catch (e) {
+      print('Error getting incomplete tasks: $e');
+      return [];
+    }
   }
 
   // Update a task
-  Future<int> updateTask(Task task) async {
-    final db = await database;
-    return await db.update(
-      'tasks',
-      task.toMap(),
-      where: 'id = ?',
-      whereArgs: [task.id],
-    );
+  Future<void> updateTask(Task task) async {
+    try {
+      if (task.id == null) throw Exception('Task ID cannot be null for update');
+      
+      await _tasksCollection.doc(task.id).update(task.toMap());
+    } catch (e) {
+      print('Error updating task: $e');
+      rethrow;
+    }
   }
 
   // Delete a task
-  Future<int> deleteTask(int id) async {
-    final db = await database;
-    return await db.delete(
-      'tasks',
-      where: 'id = ?',
-      whereArgs: [id],
-    );
+  Future<void> deleteTask(String id) async {
+    try {
+      await _tasksCollection.doc(id).delete();
+    } catch (e) {
+      print('Error deleting task: $e');
+      rethrow;
+    }
   }
 
   // Mark task as completed
-  Future<int> markTaskCompleted(int id) async {
-    final db = await database;
-    return await db.update(
-      'tasks',
-      {'isCompleted': 1},
-      where: 'id = ?',
-      whereArgs: [id],
-    );
+  Future<void> markTaskCompleted(String id) async {
+    try {
+      await _tasksCollection.doc(id).update({'isCompleted': true});
+    } catch (e) {
+      print('Error marking task as completed: $e');
+      rethrow;
+    }
   }
 
   // Get tasks with reminders for notifications
   Future<List<Task>> getTasksWithReminders() async {
-    final db = await database;
-    final List<Map<String, dynamic>> maps = await db.query(
-      'tasks',
-      where: 'hasReminder = ? AND isCompleted = ?',
-      whereArgs: [1, 0],
-    );
-    return List.generate(maps.length, (i) => Task.fromMap(maps[i]));
+    try {
+      final querySnapshot = await _tasksCollection
+          .where('hasReminder', isEqualTo: true)
+          .where('isCompleted', isEqualTo: false)
+          .get();
+      
+      return querySnapshot.docs
+          .map((doc) => Task.fromFirestore(doc))
+          .toList();
+    } catch (e) {
+      print('Error getting tasks with reminders: $e');
+      return [];
+    }
   }
+
+  // Get real-time stream of tasks
+  Stream<List<Task>> getTasksStream() {
+    try {
+      return _tasksCollection
+          .orderBy('createdAt', descending: true)
+          .snapshots()
+          .map((snapshot) => snapshot.docs
+              .map((doc) => Task.fromFirestore(doc))
+              .toList());
+    } catch (e) {
+      print('Error getting tasks stream: $e');
+      return Stream.value([]);
+    }
+  }
+
+  // Get real-time stream of incomplete tasks
+  Stream<List<Task>> getIncompleteTasksStream() {
+    try {
+      return _tasksCollection
+          .where('isCompleted', isEqualTo: false)
+          .orderBy('createdAt', descending: true)
+          .snapshots()
+          .map((snapshot) => snapshot.docs
+              .map((doc) => Task.fromFirestore(doc))
+              .toList());
+    } catch (e) {
+      print('Error getting incomplete tasks stream: $e');
+      return Stream.value([]);
+    }
+  }
+
+  // Sign out user
+  Future<void> signOut() async {
+    await _auth.signOut();
+    _userId = null;
+  }
+
+  // Get current user ID
+  String? get currentUserId => _userId;
 }
